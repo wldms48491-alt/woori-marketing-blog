@@ -1,0 +1,1879 @@
+import { normalizeLocationAlias } from './aliasNormalizer';
+
+export interface ParsedAddress {
+  city?: string;
+  district?: string;
+  neighborhood?: string;
+  street?: string;
+}
+
+export interface LocationExtractionResult {
+  city: string;
+  district: string;
+  neighborhoods: string[];
+  confidence: 'high' | 'medium' | 'low';
+  source: string;
+  signals?: Record<string, any>;
+}
+
+export interface NearbyLocations {
+  commercialAreas: string[];
+  metro: string[];
+  landmarks: string[];
+  attractions: string[];
+}
+
+export const locationDatabase: { [key: string]: any } = {
+  '서울': {
+    '강남구': { neighborhoods: ['강남동', '강남역', '역삼동', '신사동'], commercialAreas: ['강남역 상권'], metro: ['강남역', '역삼역'], landmarks: ['코엑스'], attractions: [] },
+    '마포구': { neighborhoods: ['홍대동', '망원동', '서교동'], commercialAreas: ['홍대 상권'], metro: ['홍대입구역', '망원역'], landmarks: ['홍대 문화거리'], attractions: [] },
+    '송파구': { neighborhoods: ['잠실동', '올림픽로'], commercialAreas: ['잠실 상권'], metro: ['잠실역', '종합운동장역'], landmarks: ['올림픽공원', '롯데월드'], attractions: [] },
+    '종로구': { neighborhoods: ['종로동', '명동'], commercialAreas: ['명동 상권'], metro: ['명동역', '시청역'], landmarks: ['명동성당'], attractions: [] },
+    '중구': { neighborhoods: ['충무로', '을지로'], commercialAreas: ['남대문 상권'], metro: ['충무로역', '을지로입구역'], landmarks: [], attractions: [] },
+    '영등포구': { neighborhoods: ['여의동', '당산동'], commercialAreas: ['여의도 금융권'], metro: ['여의나루역', '당산역'], landmarks: ['63빌딩'], attractions: [] },
+    '서초구': { neighborhoods: ['서초동', '반포동'], commercialAreas: ['강남역 연결'], metro: ['서초역', '반포역'], landmarks: ['서울 중앙지검'], attractions: [] },
+    '구로구': { neighborhoods: ['구로동', '신도림동'], commercialAreas: ['신도림 상권'], metro: ['신도림역'], landmarks: [], attractions: [] },
+    '금천구': { neighborhoods: ['가산동'], commercialAreas: ['가산디지털단지'], metro: ['가산디지털단지역'], landmarks: [], attractions: [] },
+    '노원구': { neighborhoods: ['상계동', '중계동'], commercialAreas: ['노원 중심'], metro: ['수락산역'], landmarks: [], attractions: [] },
+    '도봉구': { neighborhoods: ['도봉동', '창동'], commercialAreas: ['도봉 중심'], metro: ['도봉산역', '창동역'], landmarks: [], attractions: [] },
+    '강북구': { neighborhoods: ['수유동'], commercialAreas: ['강북 중심'], metro: ['수유역'], landmarks: [], attractions: [] },
+    '성북구': { neighborhoods: ['성북동', '길음동'], commercialAreas: ['성북 중심'], metro: ['길음역'], landmarks: [], attractions: [] },
+    '강동구': { neighborhoods: ['천호동', '성내동'], commercialAreas: ['천호 상권'], metro: ['천호역'], landmarks: [], attractions: [] },
+    '강서구': { neighborhoods: ['화곡동', '등촌동'], commercialAreas: ['강서 중심'], metro: ['화곡역'], landmarks: [], attractions: [] },
+    '동작구': { neighborhoods: ['노량진동', '흑석동'], commercialAreas: ['노량진 상권'], metro: ['노량진역'], landmarks: [], attractions: [] },
+    '관악구': { neighborhoods: ['신림동', '봉천동'], commercialAreas: ['신림 상권'], metro: ['신림역'], landmarks: [], attractions: [] },
+    '서대문구': { neighborhoods: ['홍제동', '충정로'], commercialAreas: ['서대문 중심'], metro: ['충정로역'], landmarks: [], attractions: [] },
+    '은평구': { neighborhoods: ['불광동', '역촌동'], commercialAreas: ['은평 중심'], metro: ['불광역'], landmarks: [], attractions: [] },
+    '양천구': { neighborhoods: ['목동'], commercialAreas: ['목동 상권'], metro: ['목동역'], landmarks: [], attractions: [] },
+    '중랑구': { neighborhoods: ['중랑동'], commercialAreas: ['중랑 중심'], metro: ['중랑역'], landmarks: [], attractions: [] },
+    '성동구': { neighborhoods: ['성수동'], commercialAreas: ['성수 상권'], metro: ['성수역'], landmarks: [], attractions: [] },
+    '성서구': { neighborhoods: ['성서동'], commercialAreas: ['성서 중심'], metro: [], landmarks: [], attractions: [] },
+    '동대문구': { neighborhoods: ['동대문동'], commercialAreas: ['동대문 상권'], metro: ['동대문역'], landmarks: ['동대문디자인플라자'], attractions: [] }
+  },
+  '부산': {
+    '중구': { neighborhoods: ['중앙동'], commercialAreas: ['남포동 상권'], metro: ['중앙역'], landmarks: [], attractions: [] },
+    '서구': { neighborhoods: ['부전동'], commercialAreas: ['부전 상권'], metro: ['부전역'], landmarks: [], attractions: [] },
+    '동구': { neighborhoods: ['초량동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영도구': { neighborhoods: ['영도동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '부산진구': { neighborhoods: ['부산진동', '서면'], commercialAreas: ['서면 상권'], metro: ['서면역'], landmarks: [], attractions: [] },
+    '동래구': { neighborhoods: ['온천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남구': { neighborhoods: ['용호동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '북구': { neighborhoods: ['구포동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '해운대구': { neighborhoods: ['우동', '해변'], commercialAreas: ['해운대 해변'], metro: ['해운대역'], landmarks: ['해운대해수욕장'], attractions: [] },
+    '사하구': { neighborhoods: ['다대포'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '금정구': { neighborhoods: ['부산대동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '강서구': { neighborhoods: ['녹산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '연제구': { neighborhoods: ['연제동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '수영구': { neighborhoods: ['수영동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '사상구': { neighborhoods: ['삼락동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '기장군': { neighborhoods: ['기장읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '인천': {
+    '중구': { neighborhoods: ['신포동'], commercialAreas: ['차이나타운'], metro: ['인천역'], landmarks: [], attractions: [] },
+    '동구': { neighborhoods: ['동인천'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남구': { neighborhoods: ['문학동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '연수구': { neighborhoods: ['송도'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남동구': { neighborhoods: ['만수동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '부평구': { neighborhoods: ['부평동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '계양구': { neighborhoods: ['작전동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '서구': { neighborhoods: ['경서동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '대구': {
+    '중구': { neighborhoods: ['중앙동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '동구': { neighborhoods: ['동성로'], commercialAreas: ['동성로 상권'], metro: [], landmarks: [], attractions: [] },
+    '서구': { neighborhoods: ['비산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남구': { neighborhoods: ['대명동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '북구': { neighborhoods: ['노원동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '수성구': { neighborhoods: ['범어동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '달서구': { neighborhoods: ['성당못'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '달성군': { neighborhoods: ['다사읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '광주': {
+    '동구': { neighborhoods: ['충장로'], commercialAreas: ['충장로 상권'], metro: [], landmarks: [], attractions: [] },
+    '서구': { neighborhoods: ['상무동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남구': { neighborhoods: ['주월동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '북구': { neighborhoods: ['신설동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '광산구': { neighborhoods: ['삼거동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '대전': {
+    '동구': { neighborhoods: ['대흥동'], commercialAreas: ['대흥 상권'], metro: [], landmarks: [], attractions: [] },
+    '중구': { neighborhoods: ['중동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '서구': { neighborhoods: ['둔산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '유성구': { neighborhoods: ['전민동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '대덕구': { neighborhoods: ['신탄진'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '울산': {
+    '중구': { neighborhoods: ['태종로'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남구': { neighborhoods: ['삼산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '동구': { neighborhoods: ['전하동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '북구': { neighborhoods: ['강동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '울주군': { neighborhoods: ['온양읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '경기': {
+    '성남': { neighborhoods: ['분당동', '분당역'], commercialAreas: ['분당 상권'], metro: ['분당역'], landmarks: ['분당신도시'], attractions: [] },
+    '수원': { neighborhoods: ['팔달로'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '안양': { neighborhoods: ['만안동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '부천': { neighborhoods: ['원미동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '광명': { neighborhoods: ['광명동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '평택': { neighborhoods: ['평택동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '동두천': { neighborhoods: ['동두천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '안산': { neighborhoods: ['시화동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '고양': { neighborhoods: ['일산동'], commercialAreas: ['일산신도시'], metro: [], landmarks: [], attractions: [] },
+    '과천': { neighborhoods: ['과천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '구리': { neighborhoods: ['구리동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남양주': { neighborhoods: ['남양주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '오산': { neighborhoods: ['오산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '시흥': { neighborhoods: ['시흥동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '군포': { neighborhoods: ['군포동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '의왕': { neighborhoods: ['의왕동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '하남': { neighborhoods: ['하남동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '용인': { neighborhoods: ['처인동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '파주': { neighborhoods: ['파주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '이천': { neighborhoods: ['이천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '안성': { neighborhoods: ['안성동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '김포': { neighborhoods: ['김포동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '화성': { neighborhoods: ['화성동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '광주': { neighborhoods: ['광주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '여주': { neighborhoods: ['여주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '강화': { neighborhoods: ['강화동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '포천': { neighborhoods: ['포천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '양주': { neighborhoods: ['양주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '동두천': { neighborhoods: ['동두천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '가평': { neighborhoods: ['가평읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '강원': {
+    '춘천': { neighborhoods: ['춘천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '원주': { neighborhoods: ['원주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '강릉': { neighborhoods: ['강릉동', '강릉역'], commercialAreas: ['강릉 상권'], metro: [], landmarks: [], attractions: [] },
+    '동해': { neighborhoods: ['동해동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '태백': { neighborhoods: ['태백동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '속초': { neighborhoods: ['속초동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '삼척': { neighborhoods: ['삼척동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '홍천': { neighborhoods: ['홍천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '횡성': { neighborhoods: ['횡성동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영월': { neighborhoods: ['영월동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '평창': { neighborhoods: ['평창동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '정선': { neighborhoods: ['정선읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '철원': { neighborhoods: ['철원읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '화천': { neighborhoods: ['화천읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '양구': { neighborhoods: ['양구읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '인제': { neighborhoods: ['인제읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '고성': { neighborhoods: ['고성읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '양양': { neighborhoods: ['양양읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '충북': {
+    '청주': { neighborhoods: ['청주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '충주': { neighborhoods: ['충주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '제천': { neighborhoods: ['제천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '음성': { neighborhoods: ['음성동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영동': { neighborhoods: ['영동읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '옥천': { neighborhoods: ['옥천읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '단양': { neighborhoods: ['단양읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '괴산': { neighborhoods: ['괴산읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '증평': { neighborhoods: ['증평읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '진천': { neighborhoods: ['진천읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '보은': { neighborhoods: ['보은읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '충남': {
+    '천안': { neighborhoods: ['천안동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '공주': { neighborhoods: ['공주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '논산': { neighborhoods: ['논산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '보령': { neighborhoods: ['보령동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '아산': { neighborhoods: ['아산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '서산': { neighborhoods: ['서산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '태안': { neighborhoods: ['태안읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '당진': { neighborhoods: ['당진동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '금산': { neighborhoods: ['금산읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '부여': { neighborhoods: ['부여읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '서천': { neighborhoods: ['서천읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '예산': { neighborhoods: ['예산읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '홍성': { neighborhoods: ['홍성읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '청양': { neighborhoods: ['청양읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '계룡': { neighborhoods: ['계룡동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '전북': {
+    '전주': { neighborhoods: ['전주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '군산': { neighborhoods: ['군산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '익산': { neighborhoods: ['익산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '정읍': { neighborhoods: ['정읍동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남원': { neighborhoods: ['남원동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '김제': { neighborhoods: ['김제동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '완주': { neighborhoods: ['완주읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '진안': { neighborhoods: ['진안읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '무주': { neighborhoods: ['무주읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '장수': { neighborhoods: ['장수읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '임실': { neighborhoods: ['임실읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '순창': { neighborhoods: ['순창읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '고창': { neighborhoods: ['고창읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '부안': { neighborhoods: ['부안읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '전남': {
+    '목포': { neighborhoods: ['목포동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '여수': { neighborhoods: ['여수동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '순천': { neighborhoods: ['순천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '나주': { neighborhoods: ['나주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '광양': { neighborhoods: ['광양동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '담양': { neighborhoods: ['담양읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '곡성': { neighborhoods: ['곡성읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '구례': { neighborhoods: ['구례읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '고흥': { neighborhoods: ['고흥읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '보성': { neighborhoods: ['보성읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '화순': { neighborhoods: ['화순읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '장흥': { neighborhoods: ['장흥읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '강진': { neighborhoods: ['강진읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영암': { neighborhoods: ['영암읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '무안': { neighborhoods: ['무안읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '함평': { neighborhoods: ['함평읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영광': { neighborhoods: ['영광읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '완도': { neighborhoods: ['완도읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '진도': { neighborhoods: ['진도읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '신안': { neighborhoods: ['신안읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '해남': { neighborhoods: ['해남읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '장성': { neighborhoods: ['장성읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '경북': {
+    '포항': { neighborhoods: ['포항동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '경주': { neighborhoods: ['경주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '김천': { neighborhoods: ['김천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '안동': { neighborhoods: ['안동동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '구미': { neighborhoods: ['구미동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영주': { neighborhoods: ['영주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영천': { neighborhoods: ['영천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '상주': { neighborhoods: ['상주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '문경': { neighborhoods: ['문경동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '칠곡': { neighborhoods: ['칠곡읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '성주': { neighborhoods: ['성주읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '군위': { neighborhoods: ['군위읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '의성': { neighborhoods: ['의성읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '청송': { neighborhoods: ['청송읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영양': { neighborhoods: ['영양읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '영덕': { neighborhoods: ['영덕읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '예천': { neighborhoods: ['예천읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '봉화': { neighborhoods: ['봉화읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '울진': { neighborhoods: ['울진읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '울릉': { neighborhoods: ['울릉읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '기타': { neighborhoods: [], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '기타2': { neighborhoods: [], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '기타3': { neighborhoods: [], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '경남': {
+    '창원': { neighborhoods: ['창원동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '마산': { neighborhoods: ['마산동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '진해': { neighborhoods: ['진해동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '통영': { neighborhoods: ['통영동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '사천': { neighborhoods: ['사천동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '거제': { neighborhoods: ['거제동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '김해': { neighborhoods: ['김해동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '밀양': { neighborhoods: ['밀양동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '의령': { neighborhoods: ['의령읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '함안': { neighborhoods: ['함안읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '창녕': { neighborhoods: ['창녕읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '고성': { neighborhoods: ['고성읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '남해': { neighborhoods: ['남해읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '하동': { neighborhoods: ['하동읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '산청': { neighborhoods: ['산청읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '함양': { neighborhoods: ['함양읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '거창': { neighborhoods: ['거창읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '합천': { neighborhoods: ['합천읍'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  },
+  '제주': {
+    '제주시': { neighborhoods: ['제주동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] },
+    '서귀포시': { neighborhoods: ['서귀포동'], commercialAreas: [], metro: [], landmarks: [], attractions: [] }
+  }
+};
+
+export function parseAddress(address: string): ParsedAddress | null {
+      neighborhoods: ['서면동', '부평동'],
+      commercialAreas: ['서면 상권'],
+      metro: ['서면역'],
+      landmarks: ['부산 시청'],
+      attractions: []
+    },
+    '해운대구': {
+      neighborhoods: ['해운대동', '중동'],
+      commercialAreas: ['해운대 상권'],
+      metro: ['해운대역'],
+      landmarks: ['해운대 해수욕장'],
+      attractions: ['해수욕장']
+    },
+    '사상구': {
+      neighborhoods: ['괘법동', '모라동'],
+      commercialAreas: ['사상 중심'],
+      metro: ['모라역'],
+      landmarks: [],
+      attractions: []
+    },
+    '사하구': {
+      neighborhoods: ['당리동'],
+      commercialAreas: ['사하 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '동래구': {
+      neighborhoods: ['온천동'],
+      commercialAreas: ['동래 상권'],
+      metro: ['온천장역'],
+      landmarks: [],
+      attractions: []
+    },
+    '남구': {
+      neighborhoods: ['대연동'],
+      commercialAreas: ['남구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '북구': {
+      neighborhoods: ['구포동'],
+      commercialAreas: ['북구 중심'],
+      metro: ['구포역'],
+      landmarks: [],
+      attractions: []
+    },
+    '강서구': {
+      neighborhoods: ['녹산동'],
+      commercialAreas: ['강서 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영도구': {
+      neighborhoods: ['청학동'],
+      commercialAreas: ['영도 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '수영구': {
+      neighborhoods: ['광안동', '민락동'],
+      commercialAreas: ['광안리 상권'],
+      metro: [],
+      landmarks: ['광안리 해수욕장'],
+      attractions: []
+    },
+    '연제구': {
+      neighborhoods: ['연산동'],
+      commercialAreas: ['연제 중심'],
+      metro: ['거제역'],
+      landmarks: [],
+      attractions: []
+    },
+    '금정구': {
+      neighborhoods: ['부산대동'],
+      commercialAreas: ['금정 중심'],
+      metro: ['부산대역'],
+      landmarks: [],
+      attractions: []
+    },
+    '중구': {
+      neighborhoods: ['광복동'],
+      commercialAreas: ['부산 중심'],
+      metro: ['중앙역'],
+      landmarks: ['용두산공원'],
+      attractions: []
+    },
+    '동구': {
+      neighborhoods: ['초량동'],
+      commercialAreas: ['동구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '서구': {
+      neighborhoods: ['초장동'],
+      commercialAreas: ['서구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '기장군': {
+      neighborhoods: ['기장읍'],
+      commercialAreas: ['기장 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '경기': {
+    '성남': {
+      neighborhoods: ['분당동', '판교동'],
+      commercialAreas: ['분당신도시'],
+      metro: ['분당역', '판교역'],
+      landmarks: ['신세계 판교'],
+      attractions: []
+    },
+    '수원': {
+      neighborhoods: ['영동', '팔달로'],
+      commercialAreas: ['수원역 상권'],
+      metro: ['수원역'],
+      landmarks: ['수원 화성'],
+      attractions: []
+    },
+    '의정부': {
+      neighborhoods: ['의정부동'],
+      commercialAreas: ['의정부 중심'],
+      metro: ['의정부역'],
+      landmarks: [],
+      attractions: []
+    },
+    '안양': {
+      neighborhoods: ['만안구', '동안구'],
+      commercialAreas: ['안양 중심'],
+      metro: ['안양역'],
+      landmarks: [],
+      attractions: []
+    },
+    '부천': {
+      neighborhoods: ['소사구', '오정구', '원미구'],
+      commercialAreas: ['부천 중심'],
+      metro: ['부천역'],
+      landmarks: [],
+      attractions: []
+    },
+    '광명': {
+      neighborhoods: ['광명동'],
+      commercialAreas: ['광명 중심'],
+      metro: ['광명역'],
+      landmarks: [],
+      attractions: []
+    },
+    '평택': {
+      neighborhoods: ['비전동'],
+      commercialAreas: ['평택 중심'],
+      metro: ['평택역'],
+      landmarks: [],
+      attractions: []
+    },
+    '동두천': {
+      neighborhoods: ['동두천동'],
+      commercialAreas: ['동두천 중심'],
+      metro: ['동두천역'],
+      landmarks: [],
+      attractions: []
+    },
+    '안산': {
+      neighborhoods: ['단원구', '상록구'],
+      commercialAreas: ['안산 중심'],
+      metro: ['안산역'],
+      landmarks: [],
+      attractions: []
+    },
+    '고양': {
+      neighborhoods: ['일산서구', '일산동구', '덕양구'],
+      commercialAreas: ['일산 신도시'],
+      metro: ['일산역'],
+      landmarks: ['킹콩영화관'],
+      attractions: []
+    },
+    '과천': {
+      neighborhoods: ['과천동'],
+      commercialAreas: ['과천 중심'],
+      metro: ['과천역'],
+      landmarks: [],
+      attractions: []
+    },
+    '구리': {
+      neighborhoods: ['인창동'],
+      commercialAreas: ['구리 중심'],
+      metro: ['구리역'],
+      landmarks: [],
+      attractions: []
+    },
+    '남양주': {
+      neighborhoods: ['다산동'],
+      commercialAreas: ['남양주 중심'],
+      metro: ['다산역'],
+      landmarks: [],
+      attractions: []
+    },
+    '오산': {
+      neighborhoods: ['오산동'],
+      commercialAreas: ['오산 중심'],
+      metro: ['오산역'],
+      landmarks: [],
+      attractions: []
+    },
+    '시흥': {
+      neighborhoods: ['시흥동'],
+      commercialAreas: ['시흥 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '군포': {
+      neighborhoods: ['산본동'],
+      commercialAreas: ['산본 상권'],
+      metro: ['산본역'],
+      landmarks: [],
+      attractions: []
+    },
+    '의왕': {
+      neighborhoods: ['의왕동'],
+      commercialAreas: ['의왕 중심'],
+      metro: ['의왕역'],
+      landmarks: [],
+      attractions: []
+    },
+    '하남': {
+      neighborhoods: ['미사동'],
+      commercialAreas: ['미사 신도시'],
+      metro: ['미사역'],
+      landmarks: [],
+      attractions: []
+    },
+    '용인': {
+      neighborhoods: ['수지구', '기흥구', '처인구'],
+      commercialAreas: ['용인 중심'],
+      metro: ['용인역'],
+      landmarks: [],
+      attractions: []
+    },
+    '파주': {
+      neighborhoods: ['문산읍'],
+      commercialAreas: ['파주 중심'],
+      metro: ['파주역'],
+      landmarks: [],
+      attractions: []
+    },
+    '이천': {
+      neighborhoods: ['이천동'],
+      commercialAreas: ['이천 중심'],
+      metro: ['이천역'],
+      landmarks: [],
+      attractions: []
+    },
+    '안성': {
+      neighborhoods: ['안성동'],
+      commercialAreas: ['안성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '김포': {
+      neighborhoods: ['김포동'],
+      commercialAreas: ['김포 중심'],
+      metro: ['김포공항역'],
+      landmarks: [],
+      attractions: []
+    },
+    '화성': {
+      neighborhoods: ['팔탄면'],
+      commercialAreas: ['화성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '광주': {
+      neighborhoods: ['광주동'],
+      commercialAreas: ['광주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '양평': {
+      neighborhoods: ['양평읍'],
+      commercialAreas: ['양평 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '포천': {
+      neighborhoods: ['포천동'],
+      commercialAreas: ['포천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '여주': {
+      neighborhoods: ['여주읍'],
+      commercialAreas: ['여주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '연천': {
+      neighborhoods: ['연천읍'],
+      commercialAreas: ['연천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '가평': {
+      neighborhoods: ['가평읍'],
+      commercialAreas: ['가평 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '강원': {
+    '강릉': {
+      neighborhoods: ['강릉동', '옥천동'],
+      commercialAreas: ['강릉 중심'],
+      metro: ['강릉역'],
+      landmarks: ['강릉 해변'],
+      attractions: ['정동진']
+    },
+    '춘천': {
+      neighborhoods: ['춘천동'],
+      commercialAreas: ['춘천 중심'],
+      metro: ['춘천역'],
+      landmarks: [],
+      attractions: []
+    },
+    '원주': {
+      neighborhoods: ['원주동'],
+      commercialAreas: ['원주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '속초': {
+      neighborhoods: ['속초동'],
+      commercialAreas: ['속초 중심'],
+      metro: [],
+      landmarks: ['속초해변'],
+      attractions: []
+    },
+    '동해': {
+      neighborhoods: ['동해동'],
+      commercialAreas: ['동해 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '태백': {
+      neighborhoods: ['태백동'],
+      commercialAreas: ['태백 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '삼척': {
+      neighborhoods: ['삼척동'],
+      commercialAreas: ['삼척 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '홍천': {
+      neighborhoods: ['홍천읍'],
+      commercialAreas: ['홍천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '횡성': {
+      neighborhoods: ['횡성읍'],
+      commercialAreas: ['횡성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영월': {
+      neighborhoods: ['영월읍'],
+      commercialAreas: ['영월 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '평창': {
+      neighborhoods: ['평창읍'],
+      commercialAreas: ['평창 중심'],
+      metro: [],
+      landmarks: ['평창올림픽'],
+      attractions: []
+    },
+    '정선': {
+      neighborhoods: ['정선읍'],
+      commercialAreas: ['정선 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '철원': {
+      neighborhoods: ['철원읍'],
+      commercialAreas: ['철원 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '화천': {
+      neighborhoods: ['화천읍'],
+      commercialAreas: ['화천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '양구': {
+      neighborhoods: ['양구읍'],
+      commercialAreas: ['양구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '인제': {
+      neighborhoods: ['인제읍'],
+      commercialAreas: ['인제 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '고성': {
+      neighborhoods: ['고성읍'],
+      commercialAreas: ['고성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '양양': {
+      neighborhoods: ['양양읍'],
+      commercialAreas: ['양양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '인천': {
+    '중구': {
+      neighborhoods: ['신생동', '을왕리'],
+      commercialAreas: ['인천 중심'],
+      metro: ['인천역'],
+      landmarks: [],
+      attractions: []
+    },
+    '동구': {
+      neighborhoods: ['송현동'],
+      commercialAreas: ['동구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '남동구': {
+      neighborhoods: ['구월동', '만수동'],
+      commercialAreas: ['인천 신도시'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '연수구': {
+      neighborhoods: ['동춘동'],
+      commercialAreas: ['연수 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '남구': {
+      neighborhoods: ['숭의동'],
+      commercialAreas: ['남구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '북구': {
+      neighborhoods: ['신한동'],
+      commercialAreas: ['북구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '강화군': {
+      neighborhoods: ['강화읍'],
+      commercialAreas: ['강화 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '옹진군': {
+      neighborhoods: ['영종면'],
+      commercialAreas: ['옹진 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '대구': {
+    '중구': {
+      neighborhoods: ['동성로'],
+      commercialAreas: ['동성로 상권'],
+      metro: ['대구역'],
+      landmarks: [],
+      attractions: []
+    },
+    '동구': {
+      neighborhoods: ['봉무동'],
+      commercialAreas: ['동구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '서구': {
+      neighborhoods: ['내당동'],
+      commercialAreas: ['서구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '남구': {
+      neighborhoods: ['대명동'],
+      commercialAreas: ['대명 상권'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '북구': {
+      neighborhoods: ['읍내동'],
+      commercialAreas: ['북구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '수성구': {
+      neighborhoods: ['범어동'],
+      commercialAreas: ['범어 상권'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '달서구': {
+      neighborhoods: ['월성동'],
+      commercialAreas: ['달서 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '달성군': {
+      neighborhoods: ['다사읍'],
+      commercialAreas: ['다사 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '광주': {
+    '동구': {
+      neighborhoods: ['동명동'],
+      commercialAreas: ['광주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '서구': {
+      neighborhoods: ['쌍촌동'],
+      commercialAreas: ['서구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '남구': {
+      neighborhoods: ['주월동'],
+      commercialAreas: ['남구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '북구': {
+      neighborhoods: ['중흥동'],
+      commercialAreas: ['북구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '광산구': {
+      neighborhoods: ['첨단동'],
+      commercialAreas: ['광산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '대전': {
+    '동구': {
+      neighborhoods: ['용전동'],
+      commercialAreas: ['동구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '중구': {
+      neighborhoods: ['중앙동'],
+      commercialAreas: ['대전 중심'],
+      metro: ['대전역'],
+      landmarks: [],
+      attractions: []
+    },
+    '서구': {
+      neighborhoods: ['둔산동'],
+      commercialAreas: ['둔산 신도시'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '유성구': {
+      neighborhoods: ['궁동'],
+      commercialAreas: ['유성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '대덕구': {
+      neighborhoods: ['신대동'],
+      commercialAreas: ['대덕 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '울산': {
+    '중구': {
+      neighborhoods: ['성남동'],
+      commercialAreas: ['울산 중심'],
+      metro: ['울산역'],
+      landmarks: [],
+      attractions: []
+    },
+    '남구': {
+      neighborhoods: ['옥동'],
+      commercialAreas: ['남구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '동구': {
+      neighborhoods: ['전하동'],
+      commercialAreas: ['동구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '북구': {
+      neighborhoods: ['천곡동'],
+      commercialAreas: ['북구 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '울주군': {
+      neighborhoods: ['온산읍'],
+      commercialAreas: ['온산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '충북': {
+    '청주': {
+      neighborhoods: ['상당구', '서원구', '흥덕구', '청원구'],
+      commercialAreas: ['청주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '충주': {
+      neighborhoods: ['중앙탑면'],
+      commercialAreas: ['충주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '제천': {
+      neighborhoods: ['제천동'],
+      commercialAreas: ['제천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '보은': {
+      neighborhoods: ['보은읍'],
+      commercialAreas: ['보은 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '옥천': {
+      neighborhoods: ['옥천읍'],
+      commercialAreas: ['옥천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영동': {
+      neighborhoods: ['영동읍'],
+      commercialAreas: ['영동 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '증평': {
+      neighborhoods: ['증평읍'],
+      commercialAreas: ['증평 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '진천': {
+      neighborhoods: ['진천읍'],
+      commercialAreas: ['진천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '괴산': {
+      neighborhoods: ['괴산읍'],
+      commercialAreas: ['괴산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '음성': {
+      neighborhoods: ['음성읍'],
+      commercialAreas: ['음성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '단양': {
+      neighborhoods: ['단양읍'],
+      commercialAreas: ['단양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '충남': {
+    '천안': {
+      neighborhoods: ['동남구', '서북구'],
+      commercialAreas: ['천안 중심'],
+      metro: ['천안역'],
+      landmarks: [],
+      attractions: []
+    },
+    '공주': {
+      neighborhoods: ['공주동'],
+      commercialAreas: ['공주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '보령': {
+      neighborhoods: ['보령동'],
+      commercialAreas: ['보령 중심'],
+      metro: [],
+      landmarks: ['신비로운 댐'],
+      attractions: []
+    },
+    '아산': {
+      neighborhoods: ['배방읍'],
+      commercialAreas: ['아산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '서산': {
+      neighborhoods: ['서산동'],
+      commercialAreas: ['서산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '홍성': {
+      neighborhoods: ['홍성읍'],
+      commercialAreas: ['홍성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '태안': {
+      neighborhoods: ['태안읍'],
+      commercialAreas: ['태안 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '당진': {
+      neighborhoods: ['당진동'],
+      commercialAreas: ['당진 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '예산': {
+      neighborhoods: ['예산읍'],
+      commercialAreas: ['예산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '서천': {
+      neighborhoods: ['서천읍'],
+      commercialAreas: ['서천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '부여': {
+      neighborhoods: ['부여읍'],
+      commercialAreas: ['부여 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '논산': {
+      neighborhoods: ['논산동'],
+      commercialAreas: ['논산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '계룡': {
+      neighborhoods: ['계룡동'],
+      commercialAreas: ['계룡 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '금산': {
+      neighborhoods: ['금산읍'],
+      commercialAreas: ['금산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '청양': {
+      neighborhoods: ['청양읍'],
+      commercialAreas: ['청양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '전북': {
+    '전주': {
+      neighborhoods: ['완산구', '덕진구'],
+      commercialAreas: ['전주 중심'],
+      metro: ['전주역'],
+      landmarks: ['전주 한옥마을'],
+      attractions: []
+    },
+    '군산': {
+      neighborhoods: ['군산동'],
+      commercialAreas: ['군산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '익산': {
+      neighborhoods: ['익산동'],
+      commercialAreas: ['익산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '정읍': {
+      neighborhoods: ['정읍동'],
+      commercialAreas: ['정읍 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '남원': {
+      neighborhoods: ['남원동'],
+      commercialAreas: ['남원 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '김제': {
+      neighborhoods: ['김제동'],
+      commercialAreas: ['김제 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '완주': {
+      neighborhoods: ['완주읍'],
+      commercialAreas: ['완주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '진안': {
+      neighborhoods: ['진안읍'],
+      commercialAreas: ['진안 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '무주': {
+      neighborhoods: ['무주읍'],
+      commercialAreas: ['무주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '장수': {
+      neighborhoods: ['장수읍'],
+      commercialAreas: ['장수 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '임실': {
+      neighborhoods: ['임실읍'],
+      commercialAreas: ['임실 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '순창': {
+      neighborhoods: ['순창읍'],
+      commercialAreas: ['순창 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '고창': {
+      neighborhoods: ['고창읍'],
+      commercialAreas: ['고창 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '부안': {
+      neighborhoods: ['부안읍'],
+      commercialAreas: ['부안 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '전남': {
+    '목포': {
+      neighborhoods: ['목포동'],
+      commercialAreas: ['목포 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '여수': {
+      neighborhoods: ['여수동'],
+      commercialAreas: ['여수 중심'],
+      metro: [],
+      landmarks: ['여수해상케이블카'],
+      attractions: []
+    },
+    '순천': {
+      neighborhoods: ['순천동'],
+      commercialAreas: ['순천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '나주': {
+      neighborhoods: ['나주동'],
+      commercialAreas: ['나주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '광양': {
+      neighborhoods: ['광양동'],
+      commercialAreas: ['광양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '담양': {
+      neighborhoods: ['담양읍'],
+      commercialAreas: ['담양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '곡성': {
+      neighborhoods: ['곡성읍'],
+      commercialAreas: ['곡성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '구례': {
+      neighborhoods: ['구례읍'],
+      commercialAreas: ['구례 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '화순': {
+      neighborhoods: ['화순읍'],
+      commercialAreas: ['화순 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '장흥': {
+      neighborhoods: ['장흥읍'],
+      commercialAreas: ['장흥 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '강진': {
+      neighborhoods: ['강진읍'],
+      commercialAreas: ['강진 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '해남': {
+      neighborhoods: ['해남읍'],
+      commercialAreas: ['해남 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영암': {
+      neighborhoods: ['영암읍'],
+      commercialAreas: ['영암 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '무안': {
+      neighborhoods: ['무안읍'],
+      commercialAreas: ['무안 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '함평': {
+      neighborhoods: ['함평읍'],
+      commercialAreas: ['함평 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영광': {
+      neighborhoods: ['영광읍'],
+      commercialAreas: ['영광 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '장성': {
+      neighborhoods: ['장성읍'],
+      commercialAreas: ['장성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '완도': {
+      neighborhoods: ['완도읍'],
+      commercialAreas: ['완도 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '진도': {
+      neighborhoods: ['진도읍'],
+      commercialAreas: ['진도 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '신안': {
+      neighborhoods: ['신안읍'],
+      commercialAreas: ['신안 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '보성': {
+      neighborhoods: ['보성읍'],
+      commercialAreas: ['보성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '셍호': {
+      neighborhoods: ['생호읍'],
+      commercialAreas: ['생호 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '경북': {
+    '포항': {
+      neighborhoods: ['북구', '남구'],
+      commercialAreas: ['포항 중심'],
+      metro: ['포항역'],
+      landmarks: [],
+      attractions: []
+    },
+    '경주': {
+      neighborhoods: ['경주동'],
+      commercialAreas: ['경주 중심'],
+      metro: [],
+      landmarks: ['불국사'],
+      attractions: ['석굴암']
+    },
+    '김천': {
+      neighborhoods: ['김천동'],
+      commercialAreas: ['김천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '안동': {
+      neighborhoods: ['안동동'],
+      commercialAreas: ['안동 중심'],
+      metro: [],
+      landmarks: ['하회마을'],
+      attractions: []
+    },
+    '구미': {
+      neighborhoods: ['구미동'],
+      commercialAreas: ['구미 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영주': {
+      neighborhoods: ['영주동'],
+      commercialAreas: ['영주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영천': {
+      neighborhoods: ['영천동'],
+      commercialAreas: ['영천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '상주': {
+      neighborhoods: ['상주동'],
+      commercialAreas: ['상주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '문경': {
+      neighborhoods: ['문경동'],
+      commercialAreas: ['문경 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '칠곡': {
+      neighborhoods: ['칠곡읍'],
+      commercialAreas: ['칠곡 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '예천': {
+      neighborhoods: ['예천읍'],
+      commercialAreas: ['예천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '봉화': {
+      neighborhoods: ['봉화읍'],
+      commercialAreas: ['봉화 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '울진': {
+      neighborhoods: ['울진읍'],
+      commercialAreas: ['울진 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '울릉': {
+      neighborhoods: ['울릉읍'],
+      commercialAreas: ['울릉 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '군위': {
+      neighborhoods: ['군위읍'],
+      commercialAreas: ['군위 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '의성': {
+      neighborhoods: ['의성읍'],
+      commercialAreas: ['의성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '청송': {
+      neighborhoods: ['청송읍'],
+      commercialAreas: ['청송 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '영양': {
+      neighborhoods: ['영양읍'],
+      commercialAreas: ['영양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '고령': {
+      neighborhoods: ['고령읍'],
+      commercialAreas: ['고령 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '성주': {
+      neighborhoods: ['성주읍'],
+      commercialAreas: ['성주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '월성': {
+      neighborhoods: ['월성읍'],
+      commercialAreas: ['월성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '청도': {
+      neighborhoods: ['청도읍'],
+      commercialAreas: ['청도 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '고청': {
+      neighborhoods: ['고청읍'],
+      commercialAreas: ['고청 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '경남': {
+    '창원': {
+      neighborhoods: ['성산구', '마산합포구', '마산회원구', '진해구'],
+      commercialAreas: ['창원 중심'],
+      metro: ['창원역'],
+      landmarks: [],
+      attractions: []
+    },
+    '진주': {
+      neighborhoods: ['진주동'],
+      commercialAreas: ['진주 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '통영': {
+      neighborhoods: ['통영동'],
+      commercialAreas: ['통영 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '사천': {
+      neighborhoods: ['사천동'],
+      commercialAreas: ['사천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '김해': {
+      neighborhoods: ['김해동'],
+      commercialAreas: ['김해 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '거제': {
+      neighborhoods: ['거제동'],
+      commercialAreas: ['거제 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '양산': {
+      neighborhoods: ['양산동'],
+      commercialAreas: ['양산 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '의령': {
+      neighborhoods: ['의령읍'],
+      commercialAreas: ['의령 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '함안': {
+      neighborhoods: ['함안읍'],
+      commercialAreas: ['함안 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '창녕': {
+      neighborhoods: ['창녕읍'],
+      commercialAreas: ['창녕 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '고성': {
+      neighborhoods: ['고성읍'],
+      commercialAreas: ['고성 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '남해': {
+      neighborhoods: ['남해읍'],
+      commercialAreas: ['남해 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '하동': {
+      neighborhoods: ['하동읍'],
+      commercialAreas: ['하동 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '산청': {
+      neighborhoods: ['산청읍'],
+      commercialAreas: ['산청 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '함양': {
+      neighborhoods: ['함양읍'],
+      commercialAreas: ['함양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '거창': {
+      neighborhoods: ['거창읍'],
+      commercialAreas: ['거창 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '합천': {
+      neighborhoods: ['합천읍'],
+      commercialAreas: ['합천 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    },
+    '밀양': {
+      neighborhoods: ['밀양동'],
+      commercialAreas: ['밀양 중심'],
+      metro: [],
+      landmarks: [],
+      attractions: []
+    }
+  },
+  '제주': {
+    '제주시': {
+      neighborhoods: ['용담동', '아라동'],
+      commercialAreas: ['제주 중심'],
+      metro: [],
+      landmarks: ['한라산'],
+      attractions: ['우도']
+    },
+    '서귀포시': {
+      neighborhoods: ['토평동', '중문동'],
+      commercialAreas: ['서귀포 중심'],
+      metro: [],
+      landmarks: ['중문관광단지'],
+      attractions: ['해변']
+    }
+  }
+};
+
+export function parseAddress(address: string): ParsedAddress | null {
+  if (!address) return null;
+  
+  const addressLower = address.toLowerCase();
+  const parsed: ParsedAddress = {};
+
+  // Step 1: 약칭 정규화 시도 (우선순위 높음)
+  const normalized = normalizeLocationAlias(address);
+  if (normalized.city) {
+    parsed.city = normalized.city;
+    parsed.district = normalized.district;
+    parsed.neighborhood = normalized.microPoi;
+    return parsed;
+  }
+
+  // Step 2: 정규식 기반 파싱 (기존 로직)
+  for (const city of Object.keys(locationDatabase)) {
+    if (addressLower.includes(city.toLowerCase())) {
+      parsed.city = city;
+      break;
+    }
+  }
+
+  if (parsed.city) {
+    for (const district of Object.keys(locationDatabase[parsed.city])) {
+      if (addressLower.includes(district.toLowerCase())) {
+        parsed.district = district;
+        break;
+      }
+    }
+  }
+
+  const neighborhoods = ['동', '읍', '면', '리'];
+  const words = address.split(/[\s,\-]/);
+  for (const word of words) {
+    for (const suffix of neighborhoods) {
+      if (word.endsWith(suffix) && word.length > 1) {
+        parsed.neighborhood = word;
+        break;
+      }
+    }
+  }
+
+  // 도로명 파싱 (로, 길, 로길, 로타길 등)
+  const streetPattern = /([가-힣]+(?:로|길|로길|타길|타로))\s*(\d+)?(?:길)?\s*(\d+)?/;
+  const streetMatch = address.match(streetPattern);
+  if (streetMatch) {
+    parsed.street = streetMatch[0];
+  }
+
+  return parsed;
+}
+
+export function extractLocationWithPriority(
+  placeInfo: string,
+  description: string
+): LocationExtractionResult {
+  // Step 1: 약칭 정규화 시도 (우선순위 가장 높음)
+  const placeAlias = normalizeLocationAlias(placeInfo);
+  const descAlias = normalizeLocationAlias(description);
+
+  let city = '';
+  let district = '';
+  let neighborhoods: string[] = [];
+  let source = 'default';
+
+  // 약칭 매칭 우선 처리
+  if (placeAlias.city) {
+    city = placeAlias.city;
+    district = placeAlias.district || '';
+    if (placeAlias.microPoi) neighborhoods.push(placeAlias.microPoi);
+    source = 'alias_placeInfo';
+  } else if (descAlias.city) {
+    city = descAlias.city;
+    district = descAlias.district || '';
+    if (descAlias.microPoi) neighborhoods.push(descAlias.microPoi);
+    source = 'alias_description';
+  } else {
+    // Step 2: 정규식 기반 파싱 (약칭 매칭 실패 시)
+    const descParsed = parseAddress(description);
+    const placeParsed = parseAddress(placeInfo);
+
+    city = descParsed?.city || placeParsed?.city || '전국';
+    district = descParsed?.district || placeParsed?.district || '';
+    source = descParsed?.city ? 'description' : placeParsed?.city ? 'placeInfo' : 'default';
+
+    if (descParsed?.neighborhood) neighborhoods.push(descParsed.neighborhood);
+    if (placeParsed?.neighborhood && !neighborhoods.includes(placeParsed.neighborhood)) {
+      neighborhoods.push(placeParsed.neighborhood);
+    }
+  }
+
+  // 신뢰도 결정
+  const confidence =
+    city && city !== '전국' && district
+      ? 'high'
+      : city && city !== '전국'
+      ? 'medium'
+      : 'low';
+
+  return {
+    city,
+    district,
+    neighborhoods,
+    confidence,
+    source,
+    signals: {
+      cityFound: !!city && city !== '전국',
+      districtFound: !!district,
+      neighborhoodsCount: neighborhoods.length
+    }
+  };
+}
+
+export function validateLocationConsistency(
+  placeInfo: string,
+  description: string
+): { isConsistent: boolean; warnings: string[]; recommendation: string } {
+  const warnings: string[] = [];
+  return {
+    isConsistent: warnings.length === 0,
+    warnings,
+    recommendation: 'OK'
+  };
+}
+
+export function getNearbyLocations(city: string, district: string): NearbyLocations {
+  const defaultResult: NearbyLocations = {
+    commercialAreas: [],
+    metro: [],
+    landmarks: [],
+    attractions: []
+  };
+
+  if (!city || !locationDatabase[city]) {
+    return defaultResult;
+  }
+
+  const cityData = locationDatabase[city];
+  if (!district || !cityData[district]) {
+    return defaultResult;
+  }
+
+  const districtData = cityData[district];
+  return {
+    commercialAreas: districtData.commercialAreas || [],
+    metro: districtData.metro || [],
+    landmarks: districtData.landmarks || [],
+    attractions: districtData.attractions || []
+  };
+}
+
+export async function hydrateLocationDatabaseFromSupabase(): Promise<boolean> {
+  return false;
+}
+
+export function searchLocation(query: string): any[] {
+  return [];
+}
+
+export function getNearbyAttractions(city: string, district: string): string[] {
+  const locations = getNearbyLocations(city, district);
+  return [...(locations.landmarks || []), ...(locations.attractions || [])];
+}
