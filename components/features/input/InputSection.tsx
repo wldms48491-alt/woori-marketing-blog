@@ -1,5 +1,6 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
 import { Play, MapPin, X } from "lucide-react";
+import { getApiUrl } from "../../../services/apiConfig";
 
 interface InputSectionProps {
   placeInput: string;
@@ -48,7 +49,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const fetchPlaces = async (query: string, page: number) => {
-    const url = `/api/search/places?query=${encodeURIComponent(query)}&page=${page}`;
+    const url = getApiUrl(`/search/places?query=${encodeURIComponent(query)}&page=${page}`);
     console.log("\n========== 🌐 API 요청 시작 ==========");
     console.log("📤 URL:", url);
     const resp = await fetch(url);

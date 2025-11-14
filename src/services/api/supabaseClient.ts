@@ -1,4 +1,5 @@
 import type { Facets, Keyword } from '../../types';
+import { getApiUrl } from '../../../services/apiConfig';
 
 /**
  * 분석 결과를 Supabase에 저장 (백엔드 HTTP API 경유)
@@ -12,7 +13,7 @@ export async function saveAnalysisToSupabase(
   guideline: string
 ) {
   try {
-    const resp = await fetch('/api/supabase/save-analysis', {
+    const resp = await fetch(getApiUrl('/supabase/save-analysis'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -39,7 +40,7 @@ export async function saveAnalysisToSupabase(
 
 export async function getUserAnalyses(userId: string) {
   try {
-    const resp = await fetch(`/api/supabase/analyses/${userId}`);
+    const resp = await fetch(getApiUrl(`/supabase/analyses/${userId}`));
 
     if (!resp.ok) {
       const err = await resp.json();
@@ -55,7 +56,7 @@ export async function getUserAnalyses(userId: string) {
 
 export async function getAnalysisDetail(analysisId: string) {
   try {
-    const resp = await fetch(`/api/supabase/analysis/${analysisId}`);
+    const resp = await fetch(getApiUrl(`/supabase/analysis/${analysisId}`));
 
     if (!resp.ok) {
       const err = await resp.json();
@@ -74,7 +75,7 @@ export async function updateAnalysis(
   updates: Record<string, any>
 ) {
   try {
-    const resp = await fetch(`/api/supabase/analysis/${analysisId}`, {
+    const resp = await fetch(getApiUrl(`/supabase/analysis/${analysisId}`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -94,7 +95,7 @@ export async function updateAnalysis(
 
 export async function deleteAnalysis(analysisId: string) {
   try {
-    const resp = await fetch(`/api/supabase/analysis/${analysisId}`, {
+    const resp = await fetch(getApiUrl(`/supabase/analysis/${analysisId}`), {
       method: 'DELETE'
     });
 
@@ -112,7 +113,7 @@ export async function deleteAnalysis(analysisId: string) {
 
 export async function saveKeywordsToSupabase(keywords: Keyword[]) {
   try {
-    const resp = await fetch('/api/supabase/save-keywords', {
+    const resp = await fetch(getApiUrl('/supabase/save-keywords'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keywords })
@@ -137,7 +138,7 @@ export async function saveGuidelineToSupabase(
   content: string
 ) {
   try {
-    const resp = await fetch('/api/supabase/save-guideline', {
+    const resp = await fetch(getApiUrl('/supabase/save-guideline'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, analysisId, tone, content })

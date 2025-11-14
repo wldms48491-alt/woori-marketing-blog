@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:backend": "tsx server/index.ts",
+    "dev:backend": "node --import=tsx/esm server/index.ts",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -1,4 +1,5 @@
 import type { Facets, Keyword, Tone } from '../../types';
+import { getApiUrl } from '../../../services/apiConfig';
 
 // Frontend service: call backend AI endpoints
 
@@ -18,7 +19,7 @@ const withRetry = async <T>(fn: () => Promise<T>, max = 3, base = 1200): Promise
 
 export const extractFacets = async (description: string, placeInfo: string, address?: string): Promise<Facets> => {
   return withRetry(async () => {
-    const resp = await fetch('/api/ai/extract-facets', {
+    const resp = await fetch(getApiUrl('/ai/extract-facets'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ description, placeInfo, address })
@@ -37,7 +38,7 @@ export const extractFacets = async (description: string, placeInfo: string, addr
 
 export const rankKeywords = async (facets: Facets): Promise<any> => {
   return withRetry(async () => {
-    const resp = await fetch('/api/ai/rank-keywords', {
+    const resp = await fetch(getApiUrl('/ai/rank-keywords'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ facets })
@@ -58,7 +59,7 @@ export const rankKeywords = async (facets: Facets): Promise<any> => {
 
 export const generateGuideline = async (keywords: string[], tone: Tone): Promise<string> => {
   return withRetry(async () => {
-    const resp = await fetch('/api/ai/generate-guideline', {
+    const resp = await fetch(getApiUrl('/ai/generate-guideline'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keywords, tone })
