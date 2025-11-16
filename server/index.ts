@@ -433,7 +433,7 @@ app.post('/api/ai/extract-facets', async (req, res) => {
 업체 설명:
 ${description}
 
-다음 JSON만 응답하세요 (추가 설명 금지):
+다음 JSON만 응답하세요 (추가 설명 금지, 코드블럭 사용 금지):
 {
   "categories": ["카테고리1", "카테고리2"],
   "items": [{"name": "메뉴/서비스명1", "signature": true}, {"name": "메뉴/서비스명2", "signature": false}],
@@ -446,11 +446,19 @@ ${description}
 }
 
 추출 규칙:
-- categories: 배열. 주 카테고리 1-3개. 명시된 것만
-- price_range: "저가", "중가", "고가", "프리미엄" 중 1개. 없으면 빈 문자열 ""
-- items: 배열. 실제 메뉴/서비스만. 각 항목은 {name, signature}
-- 나머지 필드: 배열. 명시되지 않은 필드는 빈 배열 []
-- 빈 값이나 추측 금지. 명확한 정보만`;
+- categories: 업종 카테고리 배열. 1-3개만. 필수 항목
+- items: 실제 메뉴/서비스만 배열. 각 항목은 {name: 문자열, signature: 불린}
+- audience: 고객층 배열. 2-3개
+- features: 주요 특징 배열. 2-3개
+- vibe: 분위기 배열. 2-3개
+- price_range: "저가"/"중가"/"고가"/"프리미엄" 중 정확히 1개. 명시되지 않으면 ""
+- amenities: 편의시설 배열. 2-3개 
+- intent: 방문의도 배열. 2-3개
+
+중요사항:
+- 명시되지 않은 정보는 추측하지 말 것. 명확한 정보만 포함
+- 빈 배열은 []로 표시
+- JSON 코드 블록 마크다운 사용 금지. 순수 JSON만 응답`;
 
         console.log('📥 Gemini 입력:', { placeInfo, descriptionLength: description.length });
         
@@ -460,28 +468,58 @@ ${description}
         console.log('🤖 Gemini 응답 원본:', responseText.substring(0, 500));
         
         // JSON 추출 - 더 강력한 파싱
-        let jsonStr = responseText;
+        let jsonStr = responseText.trim();
         
-        // 1단계: ```json ... ``` 형식 처리
-        const jsonBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+        // 1단계: ```json ... ``` 또는 ``` ... ``` 형식 제거
+        const jsonBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
         if (jsonBlockMatch) {
           jsonStr = jsonBlockMatch[1].trim();
         }
         
-        // 2단계: JSON 객체 추출
-        const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
+        // 2단계: JSON 객체 추출 - 첫 { 부터 마지막 } 까지
+        const firstBrace = jsonStr.indexOf('{');
+        const lastBrace = jsonStr.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+          jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+        }
+        
+        console.log('🔍 파싱 시도 JSON:', jsonStr.substring(0, 300));
+        
+        if (jsonStr) {
           try {
-            const parsed = JSON.parse(jsonMatch[0]);
-            geminiAnalysis = parsed;
-            geminiSuccess = true;
-            console.log('✅ Gemini 분석 성공');
-            console.log('  - categories:', parsed.categories?.slice(0, 3));
-            console.log('  - items:', parsed.items?.length || 0, '개');
-            console.log('  - audience:', parsed.audience?.length || 0, '개');
-            console.log('  - price_range:', parsed.price_range);
+            const parsed = JSON.parse(jsonStr);
+            
+            // 데이터 유효성 검증
+            if (parsed && typeof parsed === 'object') {
+              // 배열 필드 검증
+              const arrayFields = ['categories', 'items', 'audience', 'features', 'vibe', 'amenities', 'intent'];
+              for (const field of arrayFields) {
+                if (!Array.isArray(parsed[field])) {
+                  parsed[field] = [];
+                }
+                // 문자열만 남기고 invalid 항목 제거
+                parsed[field] = parsed[field].filter((item: any) => {
+                  if (typeof item === 'string' && item.trim()) return true;
+                  if (typeof item === 'object' && item?.name && typeof item.name === 'string') return true;
+                  return false;
+                });
+              }
+              
+              geminiAnalysis = parsed;
+              geminiSuccess = true;
+              console.log('✅ Gemini 분석 성공');
+              console.log('  - categories:', parsed.categories?.length || 0, '개:', parsed.categories?.slice(0, 3));
+              console.log('  - items:', parsed.items?.length || 0, '개');
+              console.log('  - audience:', parsed.audience?.length || 0, '개');
+              console.log('  - features:', parsed.features?.length || 0, '개');
+              console.log('  - vibe:', parsed.vibe?.length || 0, '개');
+              console.log('  - amenities:', parsed.amenities?.length || 0, '개');
+              console.log('  - intent:', parsed.intent?.length || 0, '개');
+              console.log('  - price_range:', parsed.price_range);
+            }
           } catch (e) {
             console.warn('⚠️ JSON 파싱 실패:', e instanceof Error ? e.message : String(e));
+            console.warn('🔗 원본 응답:', responseText.substring(0, 200));
             geminiAnalysis = null;
           }
         }
@@ -617,10 +655,24 @@ ${description}
     const tradeAreaDetails = buildTradeAreaDetails(finalCity, finalDistrict);
     
     const facets = {
+      // 프론트엔드 타입과 일치하는 구조
+      name: placeInfo.trim(),                                            // 업체명
       place: { 
         name: placeInfo.trim(), 
         address: [finalCity, finalDistrict].filter(Boolean).join(' ') || '위치 미확인'
       },
+      
+      // 정규화된 분석 결과 사용 (프론트엔드 타입 준수)
+      category: normalizedAnalysis.categories,                           // 배열
+      items: normalizedAnalysis.items,                                   // 배열
+      audience: normalizedAnalysis.audience,                             // 배열
+      vibe: normalizedAnalysis.vibe,                                     // 배열
+      features: normalizedAnalysis.features,                             // 배열
+      price_range: normalizedAnalysis.price_range ? [normalizedAnalysis.price_range] : [],  // 배열
+      amenities: normalizedAnalysis.amenities,                           // 배열
+      intent: normalizedAnalysis.intent,                                 // 배열
+      
+      // 위치 정보 (상권 분석용)
       location: {
         city: finalCity || undefined,
         district: finalDistrict || undefined,
@@ -631,19 +683,20 @@ ${description}
         confidence: locationConfidence,
         poi: locationResult.neighborhoods || [],
       },
-      // 정규화된 분석 결과 사용
-      category: normalizedAnalysis.categories,  // 배열로 반환
-      items: normalizedAnalysis.items,
-      audience: normalizedAnalysis.audience,
-      vibe: normalizedAnalysis.vibe,
-      price_range: normalizedAnalysis.price_range ? [normalizedAnalysis.price_range] : [],
-      amenities: normalizedAnalysis.amenities,
-      features: normalizedAnalysis.features,
-      intent: normalizedAnalysis.intent,
-      // trade_area: 동과 미시상권만 포함 (도시/구군은 location에서 관리)
+      
+      // 상권 정보 (동과 미시상권)
       trade_area: [finalDong, finalMicroArea].filter(Boolean),
       ...(tradeAreaDetails.length > 0 && { trade_area_details: tradeAreaDetails }), // 상세 상권 정보 추가
     };
+
+    console.log('📤 최종 응답 구조:', {
+      name: facets.name,
+      category_count: facets.category?.length || 0,
+      items_count: facets.items?.length || 0,
+      audience_count: facets.audience?.length || 0,
+      vibe_count: facets.vibe?.length || 0,
+      location: { city: finalCity, district: finalDistrict, dong: finalDong, micro_area: finalMicroArea },
+    });
 
     res.json(facets);
   } catch (error) {
@@ -658,25 +711,35 @@ ${description}
 function extractFacetsHeuristic(placeInfo: string, description: string): any {
   const text = `${placeInfo} ${description}`.toLowerCase();
   
+  console.log('🔄 휴리스틱 추출 시작:', { placeInfo, descriptionLength: description.length });
+  
   // 카테고리 추론 (여러 개 가능)
   const categories: string[] = [];
-  const categoryMap: Record<string, string> = {
-    '카페|커피|브런치|아메리카노|라떼|에스프레소': '카페',
-    '음식점|식당|라면|국수|밥|육회|회|초밥|스시|피자|햄버거|치킨': '음식점',
-    '세차|자동차|세차장|차량|스팀|광택|손세차': '세차장',
-    '헬스|체육|운동|피트니스|요가|필라테스|짐': '헬스',
-    '미용|머리|헤어|매니큐어|페디큐어|피부|에스테틱': '미용',
-    '술|주점|호프|펍|클럽|바|칵테일': '주점',
-    '숙박|호텔|모텔|에어비앤비|게스트하우스|펜션': '숙박',
-    '병원|의원|클리닉|치과|한의원|약국': '의료',
-    '학원|어학|영어|수학|과외|교육': '학원',
+  const categoryMap: Record<string, string[]> = {
+    '카페': ['카페', '커피', '브런치', '아메리카노', '라떼', '에스프레소', '모카', '베이커리', '디저트', '초콜릿'],
+    '음식점': ['음식점', '식당', '라면', '국수', '밥', '육회', '회', '초밥', '스시', '피자', '햄버거', '치킨', '파스타', '리소또', '스테이크', '구이'],
+    '세차장': ['세차', '자동차', '세차장', '차량', '스팀', '광택', '손세차', '세차업체'],
+    '헬스': ['헬스', '체육', '운동', '피트니스', '요가', '필라테스', '짐', '헬스장', '스포츠'],
+    '미용': ['미용', '머리', '헤어', '매니큐어', '페디큐어', '피부', '에스테틱', '네일', '헤어샵', '뷰티'],
+    '주점': ['술', '주점', '호프', '펍', '클럽', '바', '칵테일', '맥주', '와인'],
+    '숙박': ['숙박', '호텔', '모텔', '에어비앤비', '게스트하우스', '펜션', '숙소', '예약'],
+    '의료': ['병원', '의원', '클리닉', '치과', '한의원', '약국', '의료', '진료'],
+    '학원': ['학원', '어학', '영어', '수학', '과외', '교육', '강좌', '수업'],
+    '쇼핑': ['쇼핑', '매장', '상점', '몰', '마켓', '편의점', '슈퍼', '백화점'],
   };
 
-  for (const [keywords, cat] of Object.entries(categoryMap)) {
-    if (new RegExp(keywords).test(text)) {
-      categories.push(cat);
+  for (const [category, keywords] of Object.entries(categoryMap)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        if (!categories.includes(category)) {
+          categories.push(category);
+        }
+        break; // 같은 카테고리는 한 번만 추가
+      }
     }
   }
+
+  console.log('📊 추출된 카테고리:', categories);
 
   // 가격대 추론
   let price_range = '';
@@ -691,27 +754,171 @@ function extractFacetsHeuristic(placeInfo: string, description: string): any {
   // 주요 메뉴/서비스 추출
   const items: any[] = [];
   const menuKeywords = [
-    { keyword: '아메리카노|라떼|카페라떼', name: '커피' },
-    { keyword: '파스타|리소또', name: '이탈리안' },
-    { keyword: '스테이크|구이|육수', name: '고기' },
-    { keyword: '회|초밥|오마카세', name: '일식' },
+    { keyword: '아메리카노|라떼|카페라떼|커피|에스프레소', name: '커피', signature: true },
+    { keyword: '파스타|리소또', name: '이탈리안', signature: true },
+    { keyword: '스테이크|구이|육수|소고기', name: '고기', signature: true },
+    { keyword: '회|초밥|오마카세|일식', name: '일식', signature: true },
+    { keyword: '치킨|닭', name: '치킨', signature: true },
+    { keyword: '피자', name: '피자', signature: true },
+    { keyword: '햄버거|버거', name: '버거', signature: true },
+    { keyword: '라면|국수', name: '국수류', signature: false },
+    { keyword: '밥|식사', name: '밥', signature: false },
   ];
 
-  for (const { keyword, name } of menuKeywords) {
-    if (new RegExp(keyword).test(text)) {
-      items.push({ name, signature: true });
+  const addedItems = new Set<string>();
+  for (const { keyword, name, signature } of menuKeywords) {
+    if (new RegExp(keyword).test(text) && !addedItems.has(name)) {
+      items.push({ name, signature });
+      addedItems.add(name);
     }
   }
+
+  // 분위기 추론 - 확대된 키워드 세트
+  const vibe: string[] = [];
+  const vibeKeywords: Record<string, string[]> = {
+    '조용함': ['조용', '평화로', '차분', '소음없', '한적', '차분', '명상'],
+    '활기찬': ['활기찬', '밝은', '에너지', '생기있', '북적', '활발', '밝다', '즐거운'],
+    '고급스러운': ['고급', '프리미엄', '럭셔리', '우아', '격식', '세련', '고급스', '품격'],
+    '캐주얼': ['캐주얼', '편안', '편한', '자유로', '편하게', '아무래도', '편이'],
+    '낭만적인': ['낭만', '로맨틱', '분위기좋', '데이트', '연인', '분위기', '오붓', '분위'],
+  };
+
+  for (const [vibe_name, keywords] of Object.entries(vibeKeywords)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        if (!vibe.includes(vibe_name)) {
+          vibe.push(vibe_name);
+        }
+        break;
+      }
+    }
+  }
+
+  // 분위기가 비어있으면 기본값 추가 (카테고리 기반)
+  if (vibe.length === 0) {
+    if (categories.includes('카페')) {
+      vibe.push('캐주얼');
+    } else if (categories.includes('주점') || categories.includes('음식점')) {
+      vibe.push('활기찬');
+    } else {
+      vibe.push('캐주얼');
+    }
+  }
+
+  // 고객층 추론 - 확대된 키워드 세트
+  const audience: string[] = [];
+  const audienceKeywords: Record<string, string[]> = {
+    '직장인': ['직장인', '사무직', '회사원', '비즈니스', '업무'],
+    '대학생': ['대학생', '학생', '캠퍼스', '청춘', '젊음'],
+    '가족': ['가족', '아이', '키즈', '아이친화', '아이용', '단체', '모임', '무리', '단체로', '여럿'],
+    '연인': ['연인', '커플', '데이트', '두명', '썸', '만남'],
+    '혼자': ['혼자', '싱글', '혼밥', '혼자서', '개인'],
+  };
+
+  for (const [audience_name, keywords] of Object.entries(audienceKeywords)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        if (!audience.includes(audience_name)) {
+          audience.push(audience_name);
+        }
+        break;
+      }
+    }
+  }
+
+  // 고객층이 비어있으면 기본값 추가
+  if (audience.length === 0) {
+    if (categories.includes('카페')) {
+      audience.push('직장인', '대학생');
+    } else if (categories.includes('음식점')) {
+      audience.push('가족', '직장인');
+    } else {
+      audience.push('직장인', '가족');
+    }
+  }
+
+  // 주요 특징 추론
+  const features: string[] = [];
+  const featureKeywords: Record<string, string[]> = {
+    '종류 많음': ['종류', '다양', '많음', '여러', '선택지'],
+    '신선함': ['신선', '신선한', '날것', '그날', '직수입'],
+    '싸다': ['싸', '저가', '저렴', '저가격', '싼', '가성비'],
+    '편함': ['쉬움', '간편', '빠름', '편함', '간단'],
+    '질 좋음': ['좋음', '최고', '우수', '우량'],
+  };
+
+  for (const [feature_name, keywords] of Object.entries(featureKeywords)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        if (!features.includes(feature_name)) {
+          features.push(feature_name);
+        }
+        break;
+      }
+    }
+  }
+
+  // 편의시설 추론
+  const amenities: string[] = [];
+  const amenityKeywords: Record<string, string[]> = {
+    '주차': ['주차', '차량', '차', '주차장'],
+    '와이파이': ['와이파이', 'wifi', 'wi-fi'],
+    '흡연': ['흡연', '담배'],
+    '테라스': ['테라스', '야외', '실외', '옥외'],
+    '단체석': ['단체석', '단체', '여럿', '테이블'],
+  };
+
+  for (const [amenity_name, keywords] of Object.entries(amenityKeywords)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        if (!amenities.includes(amenity_name)) {
+          amenities.push(amenity_name);
+        }
+        break;
+      }
+    }
+  }
+
+  // 방문 의도 추론
+  const intent: string[] = [];
+  const intentKeywords: Record<string, string[]> = {
+    '식사': ['밥', '식사', '점심', '저녁', '아침'],
+    '카페': ['커피', '카페', '차', '음료', '아메리카노'],
+    '브런치': ['브런치', '아침식사'],
+    '모임': ['모임', '약속', '만남', '단체', '무리'],
+    '휴식': ['휴식', '쉬다', '쉼', '편한'],
+  };
+
+  for (const [intent_name, keywords] of Object.entries(intentKeywords)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        if (!intent.includes(intent_name)) {
+          intent.push(intent_name);
+        }
+        break;
+      }
+    }
+  }
+
+  console.log('🎯 휴리스틱 추출 완료:', { 
+    categories: categories.length, 
+    items: items.length, 
+    vibe: vibe.length, 
+    audience: audience.length,
+    features: features.length,
+    amenities: amenities.length,
+    intent: intent.length
+  });
 
   return {
     categories: categories.length > 0 ? categories : ['기타'],
     price_range,
     items,
-    audience: [],
-    features: [],
-    vibe: [],
-    amenities: [],
-    intent: [],
+    audience,
+    features,
+    vibe,
+    amenities,
+    intent,
   };
 }
 
